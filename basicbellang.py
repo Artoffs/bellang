@@ -890,7 +890,7 @@ class Interpreter:
                 return res.success(expr_value)
 
         if node.else_cases:
-            else_value = res.register(self.visit(node.else_case, context))
+            else_value = res.register(self.visit(node.else_cases, context))
             if res.error:
                 return res
             return res.success(else_value)
