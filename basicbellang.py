@@ -127,7 +127,11 @@ KEYWORDS = [
     'ПЕР',
     'і',
     'або',
-    'не'
+    'не',
+    'кали',
+    'тады',
+    'интады',
+    'инакш'
 ]
 
 
@@ -353,6 +357,15 @@ class UnaryOpNode:
         self.pos_start = self.op_tok.pos_start
         self.pos_end = node.pos_end
 
+
+class IfNode:
+    def __init__(self, cases, else_cases):
+        self.cases = cases
+        self.else_cases = else_cases
+
+        self.pos_start = self.cases[0][0].pos_start
+        self.pos_end = (self.else_cases or self.cases[len(self.cases) - 1][0]).pos_end
+
     def __repr__(self):
         return f'({self.op_tok}, {self.node})'
 
@@ -413,6 +426,69 @@ class Parser:
         return res
 
     ###################################
+    def if_expr(self):
+        res = ParseResult()
+        cases = []
+        else_case = None
+
+        if not self.current_tok.matches(TT_KEYWORD, 'кали'):
+            return res.failure(InvalidSyntaxError(
+                self.current_tok.pos_start, self.current_tok.pos_end,
+                f"Чакана 'кали'"
+            ))
+
+        res.register_advancement()
+        self.advance()
+
+        condition = res.register(self.expr())
+        if res.error:
+            return res
+
+        if not self.current_tok.matches(TT_KEYWORD, 'тады'):
+            return res.failure(InvalidSyntaxError(
+                self.current_tok.pos_start, self.current_tok.pos_end,
+                f"Чакана 'тады'"
+            ))
+
+        res.register_advancement()
+        self.advance()
+
+        expr = res.register(self.expr())
+        if res.error:
+            return res
+        cases.append((condition, expr))
+
+        while self.current_tok.matches(TT_KEYWORD, 'интады'):
+            res.register_advancement()
+            self.advance()
+
+            condition = res.register(self.expr())
+            if res.error:
+                return res
+
+            if not self.current_tok.matches(TT_KEYWORD, 'тады'):
+                return res.failure(InvalidSyntaxError(
+                    self.current_tok.pos_start, self.current_tok.pos_end,
+                    f"Чакана 'тады'"
+                ))
+
+            res.register_advancement()
+            self.advance()
+
+            expr = res.register(self.expr())
+            if res.error:
+                return res
+            cases.append((condition, expr))
+
+        if self.current_tok.matches(TT_KEYWORD, 'инакш'):
+            res.register_advancement()
+            self.advance()
+
+            else_case = res.register(self.expr())
+            if res.error:
+                return res
+        return res.success(IfNode(cases, else_case))
+
     def atom(self):
         res = ParseResult()
         tok = self.current_tok
@@ -442,6 +518,12 @@ class Parser:
                     self.current_tok.pos_start, self.current_tok.pos_end,
                     "Чакана ')'"
                 ))
+
+        elif tok.matches(TT_KEYWORD, 'кали'):
+            if_expr = res.register(self.if_expr())
+            if res.error:
+                return res
+            return res.success(if_expr)
 
         return res.failure(InvalidSyntaxError(
             tok.pos_start, tok.pos_end,
@@ -660,6 +742,9 @@ class Number:
         copy.set_context(self.context)
         return copy
 
+    def is_true(self):
+        return self.value != 0
+
     def __repr__(self):
         return str(self.value)
 
@@ -790,11 +875,33 @@ class Interpreter:
         else:
             return res.success(number.set_pos(node.pos_start, node.pos_end))
 
+    def visit_IfNode(self, node, context):
+        res = RTResult()
 
+        for condition, expr in node.cases:
+            condition_value = res.register(self.visit(condition, context))
+            if res.error:
+                return res
+
+            if condition_value.is_true():
+                expr_value = res.register(self.visit(expr, context))
+                if res.error:
+                    return res
+                return res.success(expr_value)
+
+        if node.else_cases:
+            else_value = res.register(self.visit(node.else_case, context))
+            if res.error:
+                return res
+            return res.success(else_value)
+
+        return res.success(None)
 # Запуск
 
 global_symbol_table = SymbolTable()
-global_symbol_table.set("нуль", Number(0))
+global_symbol_table.set("НУЛЬ", Number(0))
+global_symbol_table.set("Хлусня", Number(0))
+global_symbol_table.set("Прауда", Number(0))
 
 
 def run(fn, text):

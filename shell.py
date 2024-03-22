@@ -1,10 +1,10 @@
 import basicbellang
 
 while True:
-    text = input(">")
-    result, error = basicbellang.run("<stdin1>", text)
+    text = input("BelLang>>>")
+    result, error = basicbellang.run("<праграмма>", text)
 
     if error:
         print(error.as_string())
-    else:
+    elif result:
         print(result)
