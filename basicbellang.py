@@ -134,7 +134,7 @@ KEYWORDS = [
     'тады',
     'интады',
     'инакш',
-    'для',
+    'ад',
     'да',
     'пакуль',
     'крок',
@@ -562,10 +562,10 @@ class Parser:
     def for_expr(self):
         res = ParseResult()
 
-        if not self.current_tok.matches(TT_KEYWORD, 'для'):
+        if not self.current_tok.matches(TT_KEYWORD, 'ад'):
             return res.failure(InvalidSyntaxError(
                 self.current_tok.pos_start, self.current_tok.pos_end,
-                f"Чакана 'для'"
+                f"Чакана 'ад'"
             ))
 
         res.register_advancement()
@@ -783,7 +783,7 @@ class Parser:
                 return res
             return res.success(if_expr)
 
-        elif tok.matches(TT_KEYWORD, 'для'):
+        elif tok.matches(TT_KEYWORD, 'ад'):
             for_expr = res.register(self.for_expr())
             if res.error:
                 return res
