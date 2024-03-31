@@ -259,6 +259,7 @@ class Lexer:
             return Token(TT_INT, int(num_str), pos_start, self.pos)
         else:
             return Token(TT_FLOAT, float(num_str), pos_start, self.pos)
+
     def make_string(self):
         string = ''
         pos_start = self.pos.copy()
@@ -270,7 +271,7 @@ class Lexer:
             't': '\t'
         }
 
-        while self.current_char != None and (self.current_char != '"' or escape_character):
+        while self.current_char is not None and (self.current_char != '"' or escape_character):
             if escape_character:
                 string += escape_characters.get(self.current_char, self.current_char)
             else:
@@ -283,6 +284,7 @@ class Lexer:
 
         self.advance()
         return Token(TT_STRING, string, pos_start, self.pos)
+
     def make_identifier(self):
         id_str = ''
         pos_start = self.pos.copy()
@@ -364,6 +366,7 @@ class NumberNode:
     def __repr__(self):
         return f'{self.tok}'
 
+
 class StringNode:
     def __init__(self, tok):
         self.tok = tok
@@ -373,6 +376,7 @@ class StringNode:
 
     def __repr__(self):
         return f'{self.tok}'
+
 
 class VarAccessNode:
     def __init__(self, var_name_tok):
@@ -876,7 +880,8 @@ class Parser:
                     self.advance()
 
                     arg_nodes.append(res.register(self.expr()))
-                    if res.error: return res
+                    if res.error:
+                        return res
 
                 if self.current_tok.type != TT_RPAREN:
                     return res.failure(InvalidSyntaxError(
@@ -1007,7 +1012,7 @@ class RTResult:
         self.value = value
         return self
 
-    def falilure(self, error):
+    def failure(self, error):
         self.error = error
         return self
 
@@ -1192,6 +1197,7 @@ class Number(Value):
     def __repr__(self):
         return str(self.value)
 
+
 class String(Value):
     def __init__(self, value):
         super().__init__()
@@ -1219,7 +1225,8 @@ class String(Value):
         return copy
 
     def __repr__(self):
-        return  f'"{self.value}"'
+        return f'"{self.value}"'
+
 
 class Function(Value):
     def __init__(self, name, body_node, arg_names):
@@ -1237,14 +1244,14 @@ class Function(Value):
         if len(args) > len(self.arg_names):
             return res.failure(RTError(
                 self.pos_start, self.pos_end,
-                f"{len(args) - len(self.arg_names)} too many args passed into '{self.name}'",
+                f"занадта шмат аргументаў перайшло ў '{self.name}'",
                 self.context
             ))
 
         if len(args) < len(self.arg_names):
             return res.failure(RTError(
                 self.pos_start, self.pos_end,
-                f"{len(self.arg_names) - len(args)} too few args passed into '{self.name}'",
+                f"недастаткова аргументаў перайшло ў '{self.name}'",
                 self.context
             ))
 
@@ -1255,7 +1262,8 @@ class Function(Value):
             new_context.symbol_table.set(arg_name, arg_value)
 
         value = res.register(interpreter.visit(self.body_node, new_context))
-        if res.error: return res
+        if res.error:
+            return res
         return res.success(value)
 
     def copy(self):
@@ -1322,7 +1330,7 @@ class Interpreter:
         value = context.symbol_table.get(var_name)
 
         if not value:
-            return res.falilure(RTError(
+            return res.failure(RTError(
                 node.pos_start, node.pos_end,
                 f"{var_name} не вызначана",
                 context
@@ -1377,7 +1385,7 @@ class Interpreter:
             result, error = left.ored_by(right)
 
         if error:
-            return res.falilure(error)
+            return res.failure(error)
         else:
             return res.success(result.set_pos(node.pos_start, node.pos_end))
 
@@ -1492,15 +1500,18 @@ class Interpreter:
         args = []
 
         value_to_call = res.register(self.visit(node.node_to_call, context))
-        if res.error: return res
+        if res.error:
+            return res
         value_to_call = value_to_call.copy().set_pos(node.pos_start, node.pos_end)
 
         for arg_node in node.arg_nodes:
             args.append(res.register(self.visit(arg_node, context)))
-            if res.error: return res
+            if res.error:
+                return res
 
         return_value = res.register(value_to_call.execute(args))
-        if res.error: return res
+        if res.error:
+            return res
         return res.success(return_value)
 # Запуск
 
