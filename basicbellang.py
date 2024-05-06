@@ -1381,7 +1381,7 @@ class Function(Value):
         return copy
 
     def __repr__(self):
-        return f"<function {self.name}>"
+        return f"<Функцыя {self.name}>"
 
 
 class Context:
