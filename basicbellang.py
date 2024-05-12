@@ -137,14 +137,17 @@ KEYWORDS = [
     'не',
     'кали',
     'тады',
-    'интады',
+    'инкали',
     'инакш',
     'ад',
     'да',
     'пакуль',
     'крок',
     'функцыя',
-    'канец'
+    'канец',
+    'ретурн',
+    'пропустить',
+    'перестать'
 ]
 
 
@@ -474,15 +477,15 @@ class WhileNode:
 
 
 class FuncDefNode:
-    def __init__(self, var_name_tok, arg_name_toks, body_node, should_return_null):
+    def __init__(self, var_name_tok, arg_name_toks, body_node, should_auto_return):
         self.var_name_tok = var_name_tok
         self.arg_name_toks = arg_name_toks
         self.body_node = body_node
-        self.should_return_null = should_return_null
+        self.should_auto_return = should_auto_return
 
         if self.var_name_tok:
             self.pos_start = self.var_name_tok.pos_start
-        elif len(self.arg_name_toks > 0):
+        elif len(self.arg_name_toks) > 0:
             self.pos_start = self.arg_name_toks[0].pos_start
         else:
             self.pos_start = self.body_node.pos_start
@@ -501,6 +504,26 @@ class CallNode:
             self.pos_end = self.arg_nodes[len(self.arg_nodes) - 1].pos_end
         else:
             self.pos_end = self.node_to_call.pos_end
+
+
+class ReturnNode:
+    def __init__(self, node_to_return, pos_start, pos_end):
+        self.node_to_return = node_to_return
+
+        self.pos_start = pos_start
+        self.pos_end = pos_end
+
+
+class ContinueNode:
+    def __init__(self, pos_start, pos_end):
+        self.pos_start = pos_start
+        self.pos_end = pos_end
+
+
+class BreakNode:
+    def __init__(self, pos_start, pos_end):
+        self.pos_start = pos_start
+        self.pos_end = pos_end
 
 
 #######################################
@@ -550,7 +573,6 @@ class Parser:
     def __init__(self, tokens):
         self.tokens = tokens
         self.tok_idx = -1
-        self.current_tok = None
         self.advance()
 
     def advance(self):
@@ -572,382 +594,205 @@ class Parser:
         if not res.error and self.current_tok.type != TT_EOF:
             return res.failure(InvalidSyntaxError(
                 self.current_tok.pos_start, self.current_tok.pos_end,
-                "Чакана '+', '-', '*' або '/'"
+                "Токен не можа з'явіцца пасля папярэдніх токенаў"
             ))
         return res
 
     ###################################
-    def if_expr(self):
+
+    def statements(self):
         res = ParseResult()
-        all_cases = res.register(self.if_expr_cases('кали'))
-        if res.error:
-            return res
-        cases, else_case = all_cases
-        return res.success(IfNode(cases, else_case))
+        statements = []
+        pos_start = self.current_tok.pos_start.copy()
 
-    def if_expr_b(self):
-        return self.if_expr_cases('интады')
-
-    def if_expr_c(self):
-        res = ParseResult()
-        else_case = None
-
-        if self.current_tok.matches(TT_KEYWORD, 'инакш'):
+        while self.current_tok.type == TT_NEWLINE:
             res.register_advancement()
             self.advance()
 
-            if self.current_tok.type == TT_NEWLINE:
+        statement = res.register(self.statement())
+        if res.error: return res
+        statements.append(statement)
+
+        more_statements = True
+
+        while True:
+            newline_count = 0
+            while self.current_tok.type == TT_NEWLINE:
                 res.register_advancement()
                 self.advance()
+                newline_count += 1
+            if newline_count == 0:
+                more_statements = False
 
-                statements = res.register(self.statements())
+            if not more_statements:
+                break
+            statement = res.try_register(self.statement())
+            if not statement:
+                self.reverse(res.to_reverse_count)
+                more_statements = False
+                continue
+            statements.append(statement)
+
+        return res.success(ListNode(
+            statements,
+            pos_start,
+            self.current_tok.pos_end.copy()
+        ))
+
+    def statement(self):
+        res = ParseResult()
+        pos_start = self.current_tok.pos_start.copy()
+
+        if self.current_tok.matches(TT_KEYWORD, 'ретурн'):
+            res.register_advancement()
+            self.advance()
+
+            expr = res.try_register(self.expr())
+            if not expr:
+                self.reverse(res.to_reverse_count)
+            return res.success(ReturnNode(expr, pos_start, self.current_tok.pos_start.copy()))
+
+        if self.current_tok.matches(TT_KEYWORD, 'пропустить'):
+            res.register_advancement()
+            self.advance()
+            return res.success(ContinueNode(pos_start, self.current_tok.pos_start.copy()))
+
+        if self.current_tok.matches(TT_KEYWORD, 'перестать'):
+            res.register_advancement()
+            self.advance()
+            return res.success(BreakNode(pos_start, self.current_tok.pos_start.copy()))
+
+        expr = res.register(self.expr())
+        if res.error:
+            return res.failure(InvalidSyntaxError(
+                self.current_tok.pos_start, self.current_tok.pos_end,
+                "Чакана 'ретурн', 'пропустить', 'перестать', 'ПЕР', 'кали', 'ад', 'пакуль', 'фунцыя', цэлы лик, дробны, индэтэфикатар, '+', '-', '(', '[' or 'не'"
+            ))
+        return res.success(expr)
+
+    def expr(self):
+        res = ParseResult()
+
+        if self.current_tok.matches(TT_KEYWORD, 'ПЕР'):
+            res.register_advancement()
+            self.advance()
+
+            if self.current_tok.type != TT_IDENTIFIER:
+                return res.failure(InvalidSyntaxError(
+                    self.current_tok.pos_start, self.current_tok.pos_end,
+                    "Чакана индэтэфикатар"
+                ))
+
+            var_name = self.current_tok
+            res.register_advancement()
+            self.advance()
+
+            if self.current_tok.type != TT_EQ:
+                return res.failure(InvalidSyntaxError(
+                    self.current_tok.pos_start, self.current_tok.pos_end,
+                    "Чакана '='"
+                ))
+
+            res.register_advancement()
+            self.advance()
+            expr = res.register(self.expr())
+            if res.error: return res
+            return res.success(VarAssignNode(var_name, expr))
+
+        node = res.register(self.bin_op(self.comp_expr, ((TT_KEYWORD, 'AND'), (TT_KEYWORD, 'OR'))))
+
+        if res.error:
+            return res.failure(InvalidSyntaxError(
+                self.current_tok.pos_start, self.current_tok.pos_end,
+                "Чакана 'ПЕР', 'кали', 'ад', 'пакуль', 'функцыя', цэлы або дробны лик, индэтэфикатар, '+', '-', '(', '[' or 'не'"
+            ))
+
+        return res.success(node)
+
+    def comp_expr(self):
+        res = ParseResult()
+
+        if self.current_tok.matches(TT_KEYWORD, 'не'):
+            op_tok = self.current_tok
+            res.register_advancement()
+            self.advance()
+
+            node = res.register(self.comp_expr())
+            if res.error: return res
+            return res.success(UnaryOpNode(op_tok, node))
+
+        node = res.register(self.bin_op(self.arith_expr, (TT_EE, TT_NE, TT_LT, TT_GT, TT_LTE, TT_GTE)))
+
+        if res.error:
+            return res.failure(InvalidSyntaxError(
+                self.current_tok.pos_start, self.current_tok.pos_end,
+                "Чакана цэлы або дробны лик, индэтэфикатар, '+', '-', '(', '[', 'кали', 'ад', 'пакуль', 'функцыя' or 'не'"
+            ))
+
+        return res.success(node)
+
+    def arith_expr(self):
+        return self.bin_op(self.term, (TT_PLUS, TT_MINUS))
+
+    def term(self):
+        return self.bin_op(self.factor, (TT_MUL, TT_DIV))
+
+    def factor(self):
+        res = ParseResult()
+        tok = self.current_tok
+
+        if tok.type in (TT_PLUS, TT_MINUS):
+            res.register_advancement()
+            self.advance()
+            factor = res.register(self.factor())
+            if res.error:
+                return res
+            return res.success(UnaryOpNode(tok, factor))
+
+        return self.power()
+
+    def power(self):
+        return self.bin_op(self.call, (TT_POW,), self.factor)
+
+    def call(self):
+        res = ParseResult()
+        atom = res.register(self.atom())
+        if res.error:
+            return res
+
+        if self.current_tok.type == TT_LPAREN:
+            res.register_advancement()
+            self.advance()
+            arg_nodes = []
+
+            if self.current_tok.type == TT_RPAREN:
+                res.register_advancement()
+                self.advance()
+            else:
+                arg_nodes.append(res.register(self.expr()))
                 if res.error:
-                    return res
-                else_case = (statements, True)
+                    return res.failure(InvalidSyntaxError(
+                        self.current_tok.pos_start, self.current_tok.pos_end,
+                        "Чакана ')', 'ПЕР', 'кали', 'ад', 'пакуль', 'функцыя', цэлы або дробны лик, индэтэфикатар, '+', '-', '(', '[' or 'не'"
+                    ))
 
-                if self.current_tok.matches(TT_KEYWORD, 'канец'):
+                while self.current_tok.type == TT_COMMA:
                     res.register_advancement()
                     self.advance()
-                else:
+
+                    arg_nodes.append(res.register(self.expr()))
+                    if res.error: return res
+
+                if self.current_tok.type != TT_RPAREN:
                     return res.failure(InvalidSyntaxError(
                         self.current_tok.pos_start, self.current_tok.pos_end,
-                        "Чакана 'канец'"
-                    ))
-            else:
-                expr = res.register(self.expr())
-                if res.error:
-                    return res
-                else_case = (expr, False)
-
-        return res.success(else_case)
-
-    def if_expr_b_or_c(self):
-        res = ParseResult()
-        cases, else_case = [], None
-
-        if self.current_tok.matches(TT_KEYWORD, 'интады'):
-            all_cases = res.register(self.if_expr_b())
-            if res.error:
-                return res
-            cases, else_case = all_cases
-        else:
-            else_case = res.register(self.if_expr_c())
-            if res.error:
-                return res
-
-        return res.success((cases, else_case))
-
-    def if_expr_cases(self, case_keyword):
-        res = ParseResult()
-        cases = []
-        else_case = None
-
-        if not self.current_tok.matches(TT_KEYWORD, case_keyword):
-            return res.failure(InvalidSyntaxError(
-                self.current_tok.pos_start, self.current_tok.pos_end,
-                f"Чакана '{case_keyword}'"
-            ))
-
-        res.register_advancement()
-        self.advance()
-
-        condition = res.register(self.expr())
-        if res.error: return res
-
-        if not self.current_tok.matches(TT_KEYWORD, 'тады'):
-            return res.failure(InvalidSyntaxError(
-                self.current_tok.pos_start, self.current_tok.pos_end,
-                f"Чакана 'тады'"
-            ))
-
-        res.register_advancement()
-        self.advance()
-
-        if self.current_tok.type == TT_NEWLINE:
-            res.register_advancement()
-            self.advance()
-
-            statements = res.register(self.statements())
-            if res.error:
-                return res
-            cases.append((condition, statements, True))
-
-            if self.current_tok.matches(TT_KEYWORD, 'канец'):
-                res.register_advancement()
-                self.advance()
-            else:
-                all_cases = res.register(self.if_expr_b_or_c())
-                if res.error:
-                    return res
-                new_cases, else_case = all_cases
-                cases.extend(new_cases)
-        else:
-            expr = res.register(self.expr())
-            if res.error:
-                return res
-            cases.append((condition, expr, False))
-
-            all_cases = res.register(self.if_expr_b_or_c())
-            if res.error:
-                return res
-            new_cases, else_case = all_cases
-            cases.extend(new_cases)
-
-        return res.success((cases, else_case))
-
-    def for_expr(self):
-        res = ParseResult()
-
-        if not self.current_tok.matches(TT_KEYWORD, 'ад'):
-            return res.failure(InvalidSyntaxError(
-                self.current_tok.pos_start, self.current_tok.pos_end,
-                f"Чакана 'ад'"
-            ))
-
-        res.register_advancement()
-        self.advance()
-
-        if self.current_tok.type != TT_IDENTIFIER:
-            return res.failure(InvalidSyntaxError(
-                self.current_tok.pos_start, self.current_tok.pos_end,
-                f"Чаканы индэтэфикатар"
-            ))
-
-        var_name = self.current_tok
-        res.register_advancement()
-        self.advance()
-
-        if self.current_tok.type != TT_EQ:
-            return res.failure(InvalidSyntaxError(
-                self.current_tok.pos_start, self.current_tok.pos_end,
-                f"Чакана '='"
-            ))
-
-        res.register_advancement()
-        self.advance()
-
-        start_value = res.register(self.expr())
-        if res.error:
-            return res
-
-        if not self.current_tok.matches(TT_KEYWORD, 'да'):
-            return res.failure(InvalidSyntaxError(
-                self.current_tok.pos_start, self.current_tok.pos_end,
-                f"Чакана 'да'"
-            ))
-
-        res.register_advancement()
-        self.advance()
-
-        end_value = res.register(self.expr())
-        if res.error:
-            return res
-
-        if self.current_tok.matches(TT_KEYWORD, 'крокам'):
-            res.register_advancement()
-            self.advance()
-
-            step_value = res.register(self.expr())
-            if res.error:
-                return res
-        else:
-            step_value = None
-
-        if not self.current_tok.matches(TT_KEYWORD, 'тады'):
-            return res.failure(InvalidSyntaxError(
-                self.current_tok.pos_start, self.current_tok.pos_end,
-                f"Чакана 'тады'"
-            ))
-
-        res.register_advancement()
-        self.advance()
-
-        if self.current_tok.type == TT_NEWLINE:
-            res.register_advancement()
-            self.advance()
-
-            body = res.register(self.statements())
-            if res.error:
-                return res
-
-            if not self.current_tok.matches(TT_KEYWORD, 'канец'):
-                return res.failure(InvalidSyntaxError(
-                    self.current_tok.pos_start, self.current_tok.pos_end,
-                    f"Чакана 'канец'"
-                ))
-
-            res.register_advancement()
-            self.advance()
-
-            return res.success(ForNode(var_name, start_value, end_value, step_value, body, True))
-
-        body = res.register(self.expr())
-        if res.error:
-            return res
-
-        return res.success(ForNode(var_name, start_value, end_value, step_value, body, False))
-
-    def while_expr(self):
-        res = ParseResult()
-
-        if not self.current_tok.matches(TT_KEYWORD, 'пакуль'):
-            return res.failure(InvalidSyntaxError(
-                self.current_tok.pos_start, self.current_tok.pos_end,
-                f"Чакана 'пакуль'"
-            ))
-
-        res.register_advancement()
-        self.advance()
-
-        condition = res.register(self.expr())
-        if res.error:
-            return res
-
-        if not self.current_tok.matches(TT_KEYWORD, 'тады'):
-            if not self.current_tok.matches(TT_KEYWORD, 'пакуль'):
-                return res.failure(InvalidSyntaxError(
-                    self.current_tok.pos_start, self.current_tok.pos_end,
-                    f"Чакана 'тады'"
-                ))
-
-        res.register_advancement()
-        self.advance()
-
-        if self.current_tok.type == TT_NEWLINE:
-            res.register_advancement()
-            self.advance()
-
-            body = res.register(self.statements())
-            if res.error:
-                return res
-
-            if not self.current_tok.matches(TT_KEYWORD, 'END'):
-                return res.failure(InvalidSyntaxError(
-                    self.current_tok.pos_start, self.current_tok.pos_end,
-                    f"Expected 'END'"
-                ))
-
-            res.register_advancement()
-            self.advance()
-
-            return res.success(WhileNode(condition, body, True))
-
-        body = res.register(self.expr())
-        if res.error:
-            return res
-
-        return res.success(WhileNode(condition, body))
-
-    def func_def(self):
-        res = ParseResult()
-
-        if not self.current_tok.matches(TT_KEYWORD, 'функцыя'):
-            return res.failure(InvalidSyntaxError(
-                self.current_tok.pos_start, self.current_tok.pos_end,
-                f"Чакана 'функцыя'"
-            ))
-
-        res.register_advancement()
-        self.advance()
-
-        if self.current_tok.type == TT_IDENTIFIER:
-            var_name_tok = self.current_tok
-            res.register_advancement()
-            self.advance()
-            if self.current_tok.type != TT_LPAREN:
-                return res.failure(InvalidSyntaxError(
-                    self.current_tok.pos_start, self.current_tok.pos_end,
-                    f"Чакана '('"
-                ))
-        else:
-            var_name_tok = None
-            if self.current_tok.type != TT_LPAREN:
-                return res.failure(InvalidSyntaxError(
-                    self.current_tok.pos_start, self.current_tok.pos_end,
-                    f"Чакан идэнтэфикатар або '('"
-                ))
-
-        res.register_advancement()
-        self.advance()
-        arg_name_toks = []
-
-        if self.current_tok.type == TT_IDENTIFIER:
-            arg_name_toks.append(self.current_tok)
-            res.register_advancement()
-            self.advance()
-
-            while self.current_tok.type == TT_COMMA:
-                res.register_advancement()
-                self.advance()
-
-                if self.current_tok.type != TT_IDENTIFIER:
-                    return res.failure(InvalidSyntaxError(
-                        self.current_tok.pos_start, self.current_tok.pos_end,
-                        f"Чаканы идэнтэфикатар"
+                        f"Чакана ',' or ')'"
                     ))
 
-                arg_name_toks.append(self.current_tok)
                 res.register_advancement()
                 self.advance()
-
-            if self.current_tok.type != TT_RPAREN:
-                return res.failure(InvalidSyntaxError(
-                    self.current_tok.pos_start, self.current_tok.pos_end,
-                    f"Чакана ',' або ')'"
-                ))
-        else:
-            if self.current_tok.type != TT_RPAREN:
-                return res.failure(InvalidSyntaxError(
-                    self.current_tok.pos_start, self.current_tok.pos_end,
-                    f"Чакана идэнтэфикатар або ')'"
-                ))
-
-        res.register_advancement()
-        self.advance()
-
-        if self.current_tok.type == TT_ARROW:
-            res.register_advancement()
-            self.advance()
-
-            body = res.register(self.expr())
-            if res.error:
-                return res
-
-            return res.success(FuncDefNode(
-                var_name_tok,
-                arg_name_toks,
-                body,
-                False
-            ))
-
-        if self.current_tok.type != TT_NEWLINE:
-            return res.failure(InvalidSyntaxError(
-                self.current_tok.pos_start, self.current_tok.pos_end,
-                f"Чакана '->' or новая страка"
-            ))
-
-        res.register_advancement()
-        self.advance()
-
-        body = res.register(self.statements())
-        if res.error:
-            return res
-
-        if not self.current_tok.matches(TT_KEYWORD, 'канец'):
-            return res.failure(InvalidSyntaxError(
-                self.current_tok.pos_start, self.current_tok.pos_end,
-                f"Чакана 'канец'"
-            ))
-
-        res.register_advancement()
-        self.advance()
-
-        return res.success(FuncDefNode(
-            var_name_tok,
-            arg_name_toks,
-            body,
-            True
-        ))
+            return res.success(CallNode(atom, arg_nodes))
+        return res.success(atom)
 
     def atom(self):
         res = ParseResult()
@@ -958,7 +803,7 @@ class Parser:
             self.advance()
             return res.success(NumberNode(tok))
 
-        if tok.type in TT_STRING:
+        elif tok.type == TT_STRING:
             res.register_advancement()
             self.advance()
             return res.success(StringNode(tok))
@@ -1016,69 +861,8 @@ class Parser:
 
         return res.failure(InvalidSyntaxError(
             tok.pos_start, tok.pos_end,
-            "Чаканы цэлы лік, дробны, ідэнтыфікатар, '+', '-', '(', '[', 'кали', 'пакуль', 'ад'"
+            "Чакана цэлы або дробны лик, индэтэфикатар, '+', '-', '(', '[', IF', 'ад', 'пакуль', 'функцыя'"
         ))
-
-    def power(self):
-        return self.bin_op(self.call, (TT_POW,), self.factor)
-
-    def call(self):
-        res = ParseResult()
-        atom = res.register(self.atom())
-        if res.error:
-            return res
-
-        if self.current_tok.type == TT_LPAREN:
-            res.register_advancement()
-            self.advance()
-            arg_nodes = []
-
-            if self.current_tok.type == TT_RPAREN:
-                res.register_advancement()
-                self.advance()
-            else:
-                arg_nodes.append(res.register(self.expr()))
-                if res.error:
-                    return res.failure(InvalidSyntaxError(
-                        self.current_tok.pos_start, self.current_tok.pos_end,
-                        "Чакана 'ПЕР', 'кали', 'ад', 'пакуль', 'функция', цэлы лик, дробны лик, идэнтэфикатар,\
-                         '*', '/', '(', '[' або 'не'"
-                    ))
-
-                while self.current_tok.type == TT_COMMA:
-                    res.register_advancement()
-                    self.advance()
-
-                    arg_nodes.append(res.register(self.expr()))
-                    if res.error:
-                        return res
-
-                if self.current_tok.type != TT_RPAREN:
-                    return res.failure(InvalidSyntaxError(
-                        self.current_tok.pos_start, self.current_tok.pos_end,
-                        f"Чакана ',' or ')'"
-                    ))
-
-                res.register_advancement()
-                self.advance()
-            return res.success(CallNode(atom, arg_nodes))
-        return res.success(atom)
-
-    def factor(self):
-        res = ParseResult()
-        tok = self.current_tok
-
-        if tok.type in (TT_PLUS, TT_MINUS):
-            res.register_advancement()
-            self.advance()
-            factor = res.register(self.factor())
-            if res.error:
-                return res
-            return res.success(UnaryOpNode(tok, factor))
-        return self.power()
-
-    def term(self):
-        return self.bin_op(self.factor, (TT_MUL, TT_DIV))
 
     def list_expr(self):
         res = ParseResult()
@@ -1088,7 +872,7 @@ class Parser:
         if self.current_tok.type != TT_LSQUARE:
             return res.failure(InvalidSyntaxError(
                 self.current_tok.pos_start, self.current_tok.pos_end,
-                "Чакана '['"
+                f"Чакана '['"
             ))
 
         res.register_advancement()
@@ -1102,7 +886,7 @@ class Parser:
             if res.error:
                 return res.failure(InvalidSyntaxError(
                     self.current_tok.pos_start, self.current_tok.pos_end,
-                    "Чакана ']', 'ПЕР', 'для', 'пакуль', 'функция', цэлы лик, дробны лик, идэнтэфикатар або '['"
+                    "Чакана ']', 'ПЕР', 'кали', 'ад', 'пакуль', 'функцыя', цэлы або дробны лик, индэтэфикатар, '+', '-', '(', '[' or 'не'"
                 ))
 
             while self.current_tok.type == TT_COMMA:
@@ -1125,114 +909,382 @@ class Parser:
         return res.success(ListNode(
             element_nodes,
             pos_start,
-            self.current_tok.pos_start.copy()
+            self.current_tok.pos_end.copy()
         ))
 
-    def arith_expr(self):
-        return self.bin_op(self.term, (TT_PLUS, TT_MINUS))
-
-    def comp_expr(self):
+    def if_expr(self):
         res = ParseResult()
-
-        if self.current_tok.matches(TT_KEYWORD, "не"):
-            op_tok = self.current_tok
-            res.register_advancement()
-            self.advance()
-
-            node = res.register(self.comp_expr())
-            if res.error:
-                return res
-            return res.success(UnaryOpNode(op_tok, node))
-
-        node = res.register(self.bin_op(self.arith_expr, (TT_EE, TT_NE, TT_LT, TT_GT, TT_LTE, TT_GTE)))
-
-        if res.error:
-            return res.failure(InvalidSyntaxError(
-                self.current_tok.pos_start, self.current_tok.pos_end,
-                "Чаканы цэлы лік, дробны, ідэнтыфікатар, '+', '-', '(', '[', 'не'"
-            ))
-
-        return res.success(node)
-
-    def statements(self):
-        res = ParseResult()
-        statements = []
-        pos_start = self.current_tok.pos_start.copy()
-
-        while self.current_tok.type == TT_NEWLINE:
-            res.register_advancement()
-            self.advance()
-
-        statement = res.register(self.expr())
+        all_cases = res.register(self.if_expr_cases('кали'))
         if res.error:
             return res
-        statements.append(statement)
+        cases, else_case = all_cases
+        return res.success(IfNode(cases, else_case))
 
-        more_statements = True
+    def if_expr_b(self):
+        return self.if_expr_cases('инкали')
 
-        while True:
-            newline_count = 0
-            while self.current_tok.type == TT_NEWLINE:
+    def if_expr_c(self):
+        res = ParseResult()
+        else_case = None
+
+        if self.current_tok.matches(TT_KEYWORD, 'инакш'):
+            res.register_advancement()
+            self.advance()
+
+            if self.current_tok.type == TT_NEWLINE:
                 res.register_advancement()
                 self.advance()
-                newline_count += 1
-            if newline_count == 0:
-                more_statements = False
 
-            if not more_statements:
-                break
-            statement = res.try_register(self.expr())
-            if not statement:
-                self.reverse(res.to_reverse_count)
-                more_statements = False
-                continue
-            statements.append(statement)
+                statements = res.register(self.statements())
+                if res.error: return res
+                else_case = (statements, True)
 
-        return res.success(ListNode(statements, pos_start, self.current_tok.pos_end.copy()))
+                if self.current_tok.matches(TT_KEYWORD, 'канец'):
+                    res.register_advancement()
+                    self.advance()
+                else:
+                    return res.failure(InvalidSyntaxError(
+                        self.current_tok.pos_start, self.current_tok.pos_end,
+                        "Чакана 'канец'"
+                    ))
+            else:
+                expr = res.register(self.statement())
+                if res.error:
+                    return res
+                else_case = (expr, False)
 
-    def expr(self):
+        return res.success(else_case)
+
+    def if_expr_b_or_c(self):
         res = ParseResult()
-        if self.current_tok.matches(TT_KEYWORD, 'ПЕР'):
-            res.register_advancement()
-            self.advance()
+        cases, else_case = [], None
 
-            if self.current_tok.type is not TT_IDENTIFIER:
-                return res.failure(InvalidSyntaxError(
-                    self.current_tok.pos_start, self.current_tok.pos_end,
-                    "Чаканы ідэнтыфікатар"
-                ))
+        if self.current_tok.matches(TT_KEYWORD, 'инкали'):
+            all_cases = res.register(self.if_expr_b())
+            if res.error: return res
+            cases, else_case = all_cases
+        else:
+            else_case = res.register(self.if_expr_c())
+            if res.error: return res
 
-            var_name = self.current_tok
-            res.register_advancement()
-            self.advance()
+        return res.success((cases, else_case))
 
-            if self.current_tok.type is not TT_EQ:
-                return res.failure(InvalidSyntaxError(
-                    self.current_tok.pos_start, self.current_tok.pos_end,
-                    "Чакана '='"
-                ))
+    def if_expr_cases(self, case_keyword):
+        res = ParseResult()
+        cases = []
+        else_case = None
 
-            res.register_advancement()
-            self.advance()
-            expr = res.register(self.expr())
-            if res.error:
-                return res
-            return res.success(VarAssignNode(var_name, expr))
-
-        node = res.register(self.bin_op(self.comp_expr, ((TT_KEYWORD, "і"), (TT_KEYWORD, "або"))))
-
-        if res.error:
+        if not self.current_tok.matches(TT_KEYWORD, case_keyword):
             return res.failure(InvalidSyntaxError(
                 self.current_tok.pos_start, self.current_tok.pos_end,
-                "Чаканы 'ПЕР', 'ад', 'пакуль', 'кали', цэлы або дробны лік, ідэнтыфікатар,'+', '-' або '('"
+                f"Чакана '{case_keyword}'"
             ))
 
-        return res.success(node)
+        res.register_advancement()
+        self.advance()
+
+        condition = res.register(self.expr())
+        if res.error:
+            return res
+
+        if not self.current_tok.matches(TT_KEYWORD, 'тады'):
+            return res.failure(InvalidSyntaxError(
+                self.current_tok.pos_start, self.current_tok.pos_end,
+                f"Чакана 'тады'"
+            ))
+
+        res.register_advancement()
+        self.advance()
+
+        if self.current_tok.type == TT_NEWLINE:
+            res.register_advancement()
+            self.advance()
+
+            statements = res.register(self.statements())
+            if res.error:
+                return res
+            cases.append((condition, statements, True))
+
+            if self.current_tok.matches(TT_KEYWORD, 'канец'):
+                res.register_advancement()
+                self.advance()
+            else:
+                all_cases = res.register(self.if_expr_b_or_c())
+                if res.error:
+                    return res
+                new_cases, else_case = all_cases
+                cases.extend(new_cases)
+        else:
+            expr = res.register(self.statement())
+            if res.error:
+                return res
+            cases.append((condition, expr, False))
+
+            all_cases = res.register(self.if_expr_b_or_c())
+            if res.error:
+                return res
+            new_cases, else_case = all_cases
+            cases.extend(new_cases)
+
+        return res.success((cases, else_case))
+
+    def for_expr(self):
+        res = ParseResult()
+
+        if not self.current_tok.matches(TT_KEYWORD, 'ад'):
+            return res.failure(InvalidSyntaxError(
+                self.current_tok.pos_start, self.current_tok.pos_end,
+                f"Чакана 'ад'"
+            ))
+
+        res.register_advancement()
+        self.advance()
+
+        if self.current_tok.type != TT_IDENTIFIER:
+            return res.failure(InvalidSyntaxError(
+                self.current_tok.pos_start, self.current_tok.pos_end,
+                f"Чакана индэтэфикатар"
+            ))
+
+        var_name = self.current_tok
+        res.register_advancement()
+        self.advance()
+
+        if self.current_tok.type != TT_EQ:
+            return res.failure(InvalidSyntaxError(
+                self.current_tok.pos_start, self.current_tok.pos_end,
+                f"Чакана '='"
+            ))
+
+        res.register_advancement()
+        self.advance()
+
+        start_value = res.register(self.expr())
+        if res.error:
+            return res
+
+        if not self.current_tok.matches(TT_KEYWORD, 'да'):
+            return res.failure(InvalidSyntaxError(
+                self.current_tok.pos_start, self.current_tok.pos_end,
+                f"Чакана 'да'"
+            ))
+
+        res.register_advancement()
+        self.advance()
+
+        end_value = res.register(self.expr())
+        if res.error:
+            return res
+
+        if self.current_tok.matches(TT_KEYWORD, 'крок'):
+            res.register_advancement()
+            self.advance()
+
+            step_value = res.register(self.expr())
+            if res.error:
+                return res
+        else:
+            step_value = None
+
+        if not self.current_tok.matches(TT_KEYWORD, 'тады'):
+            return res.failure(InvalidSyntaxError(
+                self.current_tok.pos_start, self.current_tok.pos_end,
+                f"Чакана 'тады'"
+            ))
+
+        res.register_advancement()
+        self.advance()
+
+        if self.current_tok.type == TT_NEWLINE:
+            res.register_advancement()
+            self.advance()
+
+            body = res.register(self.statements())
+            if res.error:
+                return res
+
+            if not self.current_tok.matches(TT_KEYWORD, 'канец'):
+                return res.failure(InvalidSyntaxError(
+                    self.current_tok.pos_start, self.current_tok.pos_end,
+                    f"Чакана 'канец'"
+                ))
+
+            res.register_advancement()
+            self.advance()
+
+            return res.success(ForNode(var_name, start_value, end_value, step_value, body, True))
+
+        body = res.register(self.statement())
+        if res.error:
+            return res
+
+        return res.success(ForNode(var_name, start_value, end_value, step_value, body, False))
+
+    def while_expr(self):
+        res = ParseResult()
+
+        if not self.current_tok.matches(TT_KEYWORD, 'пакуль'):
+            return res.failure(InvalidSyntaxError(
+                self.current_tok.pos_start, self.current_tok.pos_end,
+                f"Чакана 'пакуль'"
+            ))
+
+        res.register_advancement()
+        self.advance()
+
+        condition = res.register(self.expr())
+        if res.error:
+            return res
+
+        if not self.current_tok.matches(TT_KEYWORD, 'тады'):
+            return res.failure(InvalidSyntaxError(
+                self.current_tok.pos_start, self.current_tok.pos_end,
+                f"Чакана 'тады'"
+            ))
+
+        res.register_advancement()
+        self.advance()
+
+        if self.current_tok.type == TT_NEWLINE:
+            res.register_advancement()
+            self.advance()
+
+            body = res.register(self.statements())
+            if res.error:
+                return res
+
+            if not self.current_tok.matches(TT_KEYWORD, 'канец'):
+                return res.failure(InvalidSyntaxError(
+                    self.current_tok.pos_start, self.current_tok.pos_end,
+                    f"Чакана 'канец'"
+                ))
+
+            res.register_advancement()
+            self.advance()
+
+            return res.success(WhileNode(condition, body, True))
+
+        body = res.register(self.statement())
+        if res.error:
+            return res
+
+        return res.success(WhileNode(condition, body, False))
+
+    def func_def(self):
+        res = ParseResult()
+
+        if not self.current_tok.matches(TT_KEYWORD, 'функцыя'):
+            return res.failure(InvalidSyntaxError(
+                self.current_tok.pos_start, self.current_tok.pos_end,
+                f"Чакана 'функцыя'"
+            ))
+
+        res.register_advancement()
+        self.advance()
+
+        if self.current_tok.type == TT_IDENTIFIER:
+            var_name_tok = self.current_tok
+            res.register_advancement()
+            self.advance()
+            if self.current_tok.type != TT_LPAREN:
+                return res.failure(InvalidSyntaxError(
+                    self.current_tok.pos_start, self.current_tok.pos_end,
+                    f"Чакана '('"
+                ))
+        else:
+            var_name_tok = None
+            if self.current_tok.type != TT_LPAREN:
+                return res.failure(InvalidSyntaxError(
+                    self.current_tok.pos_start, self.current_tok.pos_end,
+                    f"Чакана индэтэфикатар або '('"
+                ))
+
+        res.register_advancement()
+        self.advance()
+        arg_name_toks = []
+
+        if self.current_tok.type == TT_IDENTIFIER:
+            arg_name_toks.append(self.current_tok)
+            res.register_advancement()
+            self.advance()
+
+            while self.current_tok.type == TT_COMMA:
+                res.register_advancement()
+                self.advance()
+
+                if self.current_tok.type != TT_IDENTIFIER:
+                    return res.failure(InvalidSyntaxError(
+                        self.current_tok.pos_start, self.current_tok.pos_end,
+                        f"Чакана индэтэфикатар"
+                    ))
+
+                arg_name_toks.append(self.current_tok)
+                res.register_advancement()
+                self.advance()
+
+            if self.current_tok.type != TT_RPAREN:
+                return res.failure(InvalidSyntaxError(
+                    self.current_tok.pos_start, self.current_tok.pos_end,
+                    f"Чакана ',' або ')'"
+                ))
+        else:
+            if self.current_tok.type != TT_RPAREN:
+                return res.failure(InvalidSyntaxError(
+                    self.current_tok.pos_start, self.current_tok.pos_end,
+                    f"Чакана индэтэфикатар або ')'"
+                ))
+
+        res.register_advancement()
+        self.advance()
+
+        if self.current_tok.type == TT_ARROW:
+            res.register_advancement()
+            self.advance()
+
+            body = res.register(self.expr())
+            if res.error:
+                return res
+
+            return res.success(FuncDefNode(
+                var_name_tok,
+                arg_name_toks,
+                body,
+                True
+            ))
+
+        if self.current_tok.type != TT_NEWLINE:
+            return res.failure(InvalidSyntaxError(
+                self.current_tok.pos_start, self.current_tok.pos_end,
+                f"Чакана '->' або новая страка"
+            ))
+
+        res.register_advancement()
+        self.advance()
+
+        body = res.register(self.statements())
+        if res.error:
+            return res
+
+        if not self.current_tok.matches(TT_KEYWORD, 'канец'):
+            return res.failure(InvalidSyntaxError(
+                self.current_tok.pos_start, self.current_tok.pos_end,
+                f"Чакана 'канец'"
+            ))
+
+        res.register_advancement()
+        self.advance()
+
+        return res.success(FuncDefNode(
+            var_name_tok,
+            arg_name_toks,
+            body,
+            False
+        ))
 
     ###################################
 
     def bin_op(self, func_a, ops, func_b=None):
-        if func_b is None:
+        if func_b == None:
             func_b = func_a
 
         res = ParseResult()
@@ -1254,21 +1306,54 @@ class Parser:
 
 class RTResult:
     def __init__(self):
+        self.reset()
+
+    def reset(self):
         self.value = None
         self.error = None
+        self.func_return_value = None
+        self.loop_should_continue = False
+        self.loop_should_break = False
 
     def register(self, res):
-        if res.error:
-            self.error = res.error
+        self.error = res.error
+        self.func_return_value = res.func_return_value
+        self.loop_should_continue = res.loop_should_continue
+        self.loop_should_break = res.loop_should_break
         return res.value
 
     def success(self, value):
+        self.reset()
         self.value = value
         return self
 
+    def success_return(self, value):
+        self.reset()
+        self.func_return_value = value
+        return self
+
+    def success_continue(self):
+        self.reset()
+        self.loop_should_continue = True
+        return self
+
+    def success_break(self):
+        self.reset()
+        self.loop_should_break = True
+        return self
+
     def failure(self, error):
+        self.reset()
         self.error = error
         return self
+
+    def should_return(self):
+        return (
+                self.error or
+                self.func_return_value or
+                self.loop_should_continue or
+                self.loop_should_break
+        )
 
 
 class Value:
@@ -1570,17 +1655,18 @@ class BaseFunction(Value):
     def check_and_populate_args(self, arg_names, args, exec_ctx):
         res = RTResult()
         res.register(self.check_args(arg_names, args))
-        if res.error: return res
+        if res.should_return():
+            return res
         self.populate_args(arg_names, args, exec_ctx)
         return res.success(None)
 
 
 class Function(BaseFunction):
-    def __init__(self, name, body_node, arg_names, should_return_null):
+    def __init__(self, name, body_node, arg_names, should_auto_return):
         super().__init__(name)
         self.body_node = body_node
         self.arg_names = arg_names
-        self.should_return_null = should_return_null
+        self.should_auto_return = should_auto_return
 
     def execute(self, args):
         res = RTResult()
@@ -1588,16 +1674,17 @@ class Function(BaseFunction):
         exec_ctx = self.generate_new_context()
 
         res.register(self.check_and_populate_args(self.arg_names, args, exec_ctx))
-        if res.error:
+        if res.should_return():
             return res
 
         value = res.register(interpreter.visit(self.body_node, exec_ctx))
-        if res.error:
+        if res.should_return() and res.func_return_value == None:
             return res
-        return res.success(Number.null if self.should_return_null else value)
+        ret_value = (value if self.should_auto_return else None) or res.func_return_value or Number.null
+        return res.success(ret_value)
 
     def copy(self):
-        copy = Function(self.name, self.body_node, self.arg_names, self.should_return_null)
+        copy = Function(self.name, self.body_node, self.arg_names, self.should_auto_return)
         copy.set_context(self.context)
         copy.set_pos(self.pos_start, self.pos_end)
         return copy
@@ -1618,10 +1705,12 @@ class BuiltInFunction(BaseFunction):
         method = getattr(self, method_name, self.no_visit_method)
 
         res.register(self.check_and_populate_args(method.arg_names, args, exec_ctx))
-        if res.error: return res
+        if res.should_return():
+            return res
 
         return_value = res.register(method(exec_ctx))
-        if res.error: return res
+        if res.should_return():
+            return res
         return res.success(return_value)
 
     def no_visit_method(self, node, context):
@@ -1761,8 +1850,8 @@ class BuiltInFunction(BaseFunction):
     execute_extend.arg_names = ["listA", "listB"]
 
 
-BuiltInFunction.print = BuiltInFunction("print")
-BuiltInFunction.print_ret = BuiltInFunction("print_ret")
+BuiltInFunction.print = BuiltInFunction("print_ret")
+BuiltInFunction.print_ret = BuiltInFunction("print")
 BuiltInFunction.input = BuiltInFunction("input")
 BuiltInFunction.input_int = BuiltInFunction("input_int")
 BuiltInFunction.clear = BuiltInFunction("clear")
@@ -1829,8 +1918,8 @@ class Interpreter:
 
         for element_node in node.element_nodes:
             elements.append(res.register(self.visit(element_node, context)))
-            if res.error:
-                return res
+            if res.should_return(): return res
+
         return res.success(
             List(elements).set_context(context).set_pos(node.pos_start, node.pos_end)
         )
@@ -1843,9 +1932,10 @@ class Interpreter:
         if not value:
             return res.failure(RTError(
                 node.pos_start, node.pos_end,
-                f"{var_name} не вызначана",
+                f"'{var_name}' не вызначана",
                 context
             ))
+
         value = value.copy().set_pos(node.pos_start, node.pos_end).set_context(context)
         return res.success(value)
 
@@ -1853,8 +1943,7 @@ class Interpreter:
         res = RTResult()
         var_name = node.var_name_tok.value
         value = res.register(self.visit(node.value_node, context))
-        if res.error:
-            return res
+        if res.should_return(): return res
 
         context.symbol_table.set(var_name, value)
         return res.success(value)
@@ -1862,11 +1951,9 @@ class Interpreter:
     def visit_BinOpNode(self, node, context):
         res = RTResult()
         left = res.register(self.visit(node.left_node, context))
-        if res.error:
-            return res
+        if res.should_return(): return res
         right = res.register(self.visit(node.right_node, context))
-        if res.error:
-            return res
+        if res.should_return(): return res
 
         if node.op_tok.type == TT_PLUS:
             result, error = left.added_to(right)
@@ -1890,9 +1977,9 @@ class Interpreter:
             result, error = left.get_comparison_lte(right)
         elif node.op_tok.type == TT_GTE:
             result, error = left.get_comparison_gte(right)
-        elif node.op_tok.matches(TT_KEYWORD, 'і'):
+        elif node.op_tok.matches(TT_KEYWORD, 'AND'):
             result, error = left.anded_by(right)
-        elif node.op_tok.matches(TT_KEYWORD, 'або'):
+        elif node.op_tok.matches(TT_KEYWORD, 'OR'):
             result, error = left.ored_by(right)
 
         if error:
@@ -1903,8 +1990,7 @@ class Interpreter:
     def visit_UnaryOpNode(self, node, context):
         res = RTResult()
         number = res.register(self.visit(node.node, context))
-        if res.error:
-            return res
+        if res.should_return(): return res
 
         error = None
 
@@ -1923,21 +2009,18 @@ class Interpreter:
 
         for condition, expr, should_return_null in node.cases:
             condition_value = res.register(self.visit(condition, context))
-            if res.error:
-                return res
+            if res.should_return(): return res
 
             if condition_value.is_true():
                 expr_value = res.register(self.visit(expr, context))
-                if res.error:
-                    return res
+                if res.should_return(): return res
                 return res.success(Number.null if should_return_null else expr_value)
 
         if node.else_case:
             expr, should_return_null = node.else_case
-            else_value = res.register(self.visit(node.else_case, context))
-            if res.error:
-                return res
-            return res.success(Number.null if should_return_null else else_value)
+            expr_value = res.register(self.visit(expr, context))
+            if res.should_return(): return res
+            return res.success(Number.null if should_return_null else expr_value)
 
         return res.success(Number.null)
 
@@ -1946,17 +2029,14 @@ class Interpreter:
         elements = []
 
         start_value = res.register(self.visit(node.start_value_node, context))
-        if res.error:
-            return res
+        if res.should_return(): return res
 
         end_value = res.register(self.visit(node.end_value_node, context))
-        if res.error:
-            return res
+        if res.should_return(): return res
 
         if node.step_value_node:
             step_value = res.register(self.visit(node.step_value_node, context))
-            if res.error:
-                return res
+            if res.should_return(): return res
         else:
             step_value = Number(1)
 
@@ -1971,9 +2051,16 @@ class Interpreter:
             context.symbol_table.set(node.var_name_tok.value, Number(i))
             i += step_value.value
 
-            elements.append(res.register(self.visit(node.body_node, context)))
-            if res.error:
-                return res
+            value = res.register(self.visit(node.body_node, context))
+            if res.should_return() and res.loop_should_continue == False and res.loop_should_break == False: return res
+
+            if res.loop_should_continue:
+                continue
+
+            if res.loop_should_break:
+                break
+
+            elements.append(value)
 
         return res.success(
             Number.null if node.should_return_null else
@@ -1986,15 +2073,21 @@ class Interpreter:
 
         while True:
             condition = res.register(self.visit(node.condition_node, context))
-            if res.error:
-                return res
+            if res.should_return(): return res
 
             if not condition.is_true():
                 break
 
-            elements.append(res.register(self.visit(node.body_node, context)))
-            if res.error:
-                return res
+            value = res.register(self.visit(node.body_node, context))
+            if res.should_return() and res.loop_should_continue == False and res.loop_should_break == False: return res
+
+            if res.loop_should_continue:
+                continue
+
+            if res.loop_should_break:
+                break
+
+            elements.append(value)
 
         return res.success(
             Number.null if node.should_return_null else
@@ -2007,8 +2100,8 @@ class Interpreter:
         func_name = node.var_name_tok.value if node.var_name_tok else None
         body_node = node.body_node
         arg_names = [arg_name.value for arg_name in node.arg_name_toks]
-        func_value = Function(func_name, body_node, arg_names, node.should_return_null).set_context(context).set_pos(node.pos_start,
-                                                                                            node.pos_end)
+        func_value = Function(func_name, body_node, arg_names, node.should_auto_return).set_context(context).set_pos(
+            node.pos_start, node.pos_end)
 
         if node.var_name_tok:
             context.symbol_table.set(func_name, func_value)
@@ -2020,20 +2113,36 @@ class Interpreter:
         args = []
 
         value_to_call = res.register(self.visit(node.node_to_call, context))
-        if res.error:
-            return res
+        if res.should_return(): return res
         value_to_call = value_to_call.copy().set_pos(node.pos_start, node.pos_end)
 
         for arg_node in node.arg_nodes:
             args.append(res.register(self.visit(arg_node, context)))
-            if res.error:
-                return res
+            if res.should_return(): return res
 
         return_value = res.register(value_to_call.execute(args))
-        if res.error:
-            return res
+        if res.should_return(): return res
         return_value = return_value.copy().set_pos(node.pos_start, node.pos_end).set_context(context)
         return res.success(return_value)
+
+    def visit_ReturnNode(self, node, context):
+        res = RTResult()
+
+        if node.node_to_return:
+            value = res.register(self.visit(node.node_to_return, context))
+            if res.should_return(): return res
+        else:
+            value = Number.null
+
+        return res.success_return(value)
+
+    def visit_ContinueNode(self, node, context):
+        return RTResult().success_continue()
+
+    def visit_BreakNode(self, node, context):
+        return RTResult().success_break()
+
+
 # Запуск
 
 
