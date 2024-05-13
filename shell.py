@@ -1,12 +1,13 @@
 import basicbellang
 from tkinter import *
-from tkinter import ttk
 from ctypes import windll
+from PIL import Image, ImageTk
 
 tk_title = "BelVim"
 
 root = Tk()
 root.title(tk_title)
+# root.iconbitmap(tk_logo)
 root.overrideredirect(True)
 root.geometry('1280x720+75+75')
 
@@ -73,6 +74,8 @@ minimize_button = Button(title_bar, text=' 🗕 ', command=minimize_me, bg=RGRAY
                          font=("calibri", 13), highlightthickness=0)
 title_bar_title = Label(title_bar, text=tk_title, bg=RGRAY, bd=0, fg='white', font=("helvetica", 10),
                         highlightthickness=0)
+tk_logo = ImageTk.PhotoImage(Image.open("logo.png"))
+title_bar_ico = Label(image=tk_logo, bd=0, width=20, height=20)
 
 # a frame for the main area of the window, this is where the actual app will go
 window = Frame(root, bg=DGRAY, highlightthickness=0)
@@ -82,7 +85,8 @@ title_bar.pack(fill=X)
 close_button.pack(side=RIGHT, ipadx=7, ipady=1)
 expand_button.pack(side=RIGHT, ipadx=7, ipady=1)
 minimize_button.pack(side=RIGHT, ipadx=7, ipady=1)
-title_bar_title.pack(side=LEFT, padx=10)
+title_bar_title.pack(side=LEFT, padx=40)
+title_bar_ico.place(y=7, relx=0.008)
 window.pack(expand=1, fill=BOTH)  # replace this with your main Canvas/Frame/etc.
 
 
@@ -211,21 +215,30 @@ root.after(10, lambda: set_appwindow(root))  # to see the icon on the task bar
 # Поле ввода текста
 editor = Text(font="Arial 14",  bg="#212120", fg="White", bd=0, state=NORMAL)
 editor.focus_set()
-editor.place(y=35, relwidth=1, relheight=0.62)
+editor.place(y=35, relwidth=1, relheight=0.62222)
 
-editor_scroll = ttk.Scrollbar(orient="vertical", command=editor.yview)
-editor_scroll.place(relx=0.9899, relheight=0.66, y=35)
 
 # # Поле вывода текста
 output = Text(font="Arial 14", bg="#333331", fg="White", bd=0, state=DISABLED)
-output.place(rely=0.67, relwidth=1, relheight=0.33)
+output.place(rely=0.67, relwidth=1, relheight=0.33333)
 
-output_scroll = ttk.Scrollbar(orient="vertical", command=output.yview)
-output_scroll.place(relx=0.9899999999, rely=0.67, relheight=0.33)
 
 
 # # Ввод текста
-def get_text(event):
+def get_text1(event):
+    output.config(state=NORMAL)
+    delete1()
+    text = editor.get("1.0", END)
+    result, error = basicbellang.run("<праграмма>", text)
+    if error:
+        output.insert(END, error.as_string() + '\n')
+    elif result:
+        output.insert(END,  result)
+        output.insert(END, '\n')
+    output.config(state=DISABLED)
+
+
+def get_text2():
     output.config(state=NORMAL)
     delete1()
     text = editor.get("1.0", END)
@@ -247,7 +260,12 @@ def delete(event):
 
 
 editor.bind('<F10>', delete)
-editor.bind('<F10>', get_text)
+editor.bind('<F10>', get_text1)
+
+image = ImageTk.PhotoImage(file="start_button.png")
+start_button = Button(image=image, bg=RGRAY, bd=0, activebackground='#1D213C', cursor='hand2', height=33, width=33,
+                      command=get_text2)
+start_button.place(relx=0.8)
 
 # ===================================================================================================
 
