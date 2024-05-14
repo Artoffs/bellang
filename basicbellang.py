@@ -135,19 +135,19 @@ KEYWORDS = [
     'і',
     'або',
     'не',
-    'кали',
+    'калі',
     'тады',
-    'инкали',
-    'инакш',
+    'інкалі',
+    'інакш',
     'ад',
     'да',
     'пакуль',
     'крок',
     'функцыя',
     'канец',
-    'ретурн',
-    'пропустить',
-    'перестать'
+    'вяртанне',
+    'прапусціць',
+    'перастаць'
 ]
 
 
@@ -643,7 +643,7 @@ class Parser:
         res = ParseResult()
         pos_start = self.current_tok.pos_start.copy()
 
-        if self.current_tok.matches(TT_KEYWORD, 'ретурн'):
+        if self.current_tok.matches(TT_KEYWORD, 'вяртанне'):
             res.register_advancement()
             self.advance()
 
@@ -652,12 +652,12 @@ class Parser:
                 self.reverse(res.to_reverse_count)
             return res.success(ReturnNode(expr, pos_start, self.current_tok.pos_start.copy()))
 
-        if self.current_tok.matches(TT_KEYWORD, 'пропустить'):
+        if self.current_tok.matches(TT_KEYWORD, 'прапусціць'):
             res.register_advancement()
             self.advance()
             return res.success(ContinueNode(pos_start, self.current_tok.pos_start.copy()))
 
-        if self.current_tok.matches(TT_KEYWORD, 'перестать'):
+        if self.current_tok.matches(TT_KEYWORD, 'перастаць'):
             res.register_advancement()
             self.advance()
             return res.success(BreakNode(pos_start, self.current_tok.pos_start.copy()))
@@ -666,7 +666,7 @@ class Parser:
         if res.error:
             return res.failure(InvalidSyntaxError(
                 self.current_tok.pos_start, self.current_tok.pos_end,
-                "Чакана 'ретурн', 'пропустить', 'перестать', 'ПЕР', 'кали', 'ад', 'пакуль', 'фунцыя', цэлы лик, дробны, индэтэфикатар, '+', '-', '(', '[' or 'не'"
+                "Чакана 'вяртанне', 'прапусціць', 'перастаць', 'ПЕР', 'калі', 'ад', 'пакуль', 'фунцыя', цэлы лік, дробны, індэтэфікатар, '+', '-', '(', '[' або 'не'"
             ))
         return res.success(expr)
 
@@ -680,7 +680,7 @@ class Parser:
             if self.current_tok.type != TT_IDENTIFIER:
                 return res.failure(InvalidSyntaxError(
                     self.current_tok.pos_start, self.current_tok.pos_end,
-                    "Чакана индэтэфикатар"
+                    "Чакана індэтэфікатар"
                 ))
 
             var_name = self.current_tok
@@ -699,12 +699,12 @@ class Parser:
             if res.error: return res
             return res.success(VarAssignNode(var_name, expr))
 
-        node = res.register(self.bin_op(self.comp_expr, ((TT_KEYWORD, 'AND'), (TT_KEYWORD, 'OR'))))
+        node = res.register(self.bin_op(self.comp_expr, ((TT_KEYWORD, 'і'), (TT_KEYWORD, 'або'))))
 
         if res.error:
             return res.failure(InvalidSyntaxError(
                 self.current_tok.pos_start, self.current_tok.pos_end,
-                "Чакана 'ПЕР', 'кали', 'ад', 'пакуль', 'функцыя', цэлы або дробны лик, индэтэфикатар, '+', '-', '(', '[' or 'не'"
+                "Чакана 'ПЕР', 'калі', 'ад', 'пакуль', 'функцыя', цэлы або дробны лік, індэтэфікатар, '+', '-', '(', '[' або 'не'"
             ))
 
         return res.success(node)
@@ -726,7 +726,7 @@ class Parser:
         if res.error:
             return res.failure(InvalidSyntaxError(
                 self.current_tok.pos_start, self.current_tok.pos_end,
-                "Чакана цэлы або дробны лик, индэтэфикатар, '+', '-', '(', '[', 'кали', 'ад', 'пакуль', 'функцыя' or 'не'"
+                "Чакана цэлы або дробны лік, індэтэфікатар, '+', '-', '(', '[', 'калі', 'ад', 'пакуль', 'функцыя' або 'не'"
             ))
 
         return res.success(node)
@@ -773,7 +773,7 @@ class Parser:
                 if res.error:
                     return res.failure(InvalidSyntaxError(
                         self.current_tok.pos_start, self.current_tok.pos_end,
-                        "Чакана ')', 'ПЕР', 'кали', 'ад', 'пакуль', 'функцыя', цэлы або дробны лик, индэтэфикатар, '+', '-', '(', '[' or 'не'"
+                        "Чакана ')', 'ПЕР', 'калі', 'ад', 'пакуль', 'функцыя', цэлы або дробны лік, індэтэфікатар, '+', '-', '(', '[' або 'не'"
                     ))
 
                 while self.current_tok.type == TT_COMMA:
@@ -786,7 +786,7 @@ class Parser:
                 if self.current_tok.type != TT_RPAREN:
                     return res.failure(InvalidSyntaxError(
                         self.current_tok.pos_start, self.current_tok.pos_end,
-                        f"Чакана ',' or ')'"
+                        f"Чакана ',' або ')'"
                     ))
 
                 res.register_advancement()
@@ -835,7 +835,7 @@ class Parser:
                 return res
             return res.success(list_expr)
 
-        elif tok.matches(TT_KEYWORD, 'кали'):
+        elif tok.matches(TT_KEYWORD, 'калі'):
             if_expr = res.register(self.if_expr())
             if res.error:
                 return res
@@ -861,7 +861,7 @@ class Parser:
 
         return res.failure(InvalidSyntaxError(
             tok.pos_start, tok.pos_end,
-            "Чакана цэлы або дробны лик, индэтэфикатар, '+', '-', '(', '[', IF', 'ад', 'пакуль', 'функцыя'"
+            "Чакана цэлы або дробны лік, індэтэфікатар, '+', '-', '(', '[', 'калі', 'ад', 'пакуль', 'функцыя'"
         ))
 
     def list_expr(self):
@@ -886,7 +886,7 @@ class Parser:
             if res.error:
                 return res.failure(InvalidSyntaxError(
                     self.current_tok.pos_start, self.current_tok.pos_end,
-                    "Чакана ']', 'ПЕР', 'кали', 'ад', 'пакуль', 'функцыя', цэлы або дробны лик, индэтэфикатар, '+', '-', '(', '[' or 'не'"
+                    "Чакана ']', 'ПЕР', 'калі', 'ад', 'пакуль', 'функцыя', цэлы або дробны лік, індэтэфікатар, '+', '-', '(', '[' або 'не'"
                 ))
 
             while self.current_tok.type == TT_COMMA:
@@ -900,7 +900,7 @@ class Parser:
             if self.current_tok.type != TT_RSQUARE:
                 return res.failure(InvalidSyntaxError(
                     self.current_tok.pos_start, self.current_tok.pos_end,
-                    f"Чакана ',' or ']'"
+                    f"Чакана ',' або ']'"
                 ))
 
             res.register_advancement()
@@ -914,20 +914,20 @@ class Parser:
 
     def if_expr(self):
         res = ParseResult()
-        all_cases = res.register(self.if_expr_cases('кали'))
+        all_cases = res.register(self.if_expr_cases('калі'))
         if res.error:
             return res
         cases, else_case = all_cases
         return res.success(IfNode(cases, else_case))
 
     def if_expr_b(self):
-        return self.if_expr_cases('инкали')
+        return self.if_expr_cases('інкалі')
 
     def if_expr_c(self):
         res = ParseResult()
         else_case = None
 
-        if self.current_tok.matches(TT_KEYWORD, 'инакш'):
+        if self.current_tok.matches(TT_KEYWORD, 'інакш'):
             res.register_advancement()
             self.advance()
 
@@ -959,7 +959,7 @@ class Parser:
         res = ParseResult()
         cases, else_case = [], None
 
-        if self.current_tok.matches(TT_KEYWORD, 'инкали'):
+        if self.current_tok.matches(TT_KEYWORD, 'інкалі'):
             all_cases = res.register(self.if_expr_b())
             if res.error: return res
             cases, else_case = all_cases
@@ -1043,7 +1043,7 @@ class Parser:
         if self.current_tok.type != TT_IDENTIFIER:
             return res.failure(InvalidSyntaxError(
                 self.current_tok.pos_start, self.current_tok.pos_end,
-                f"Чакана индэтэфикатар"
+                f"Чакана індэтэфікатар"
             ))
 
         var_name = self.current_tok
@@ -1196,7 +1196,7 @@ class Parser:
             if self.current_tok.type != TT_LPAREN:
                 return res.failure(InvalidSyntaxError(
                     self.current_tok.pos_start, self.current_tok.pos_end,
-                    f"Чакана индэтэфикатар або '('"
+                    f"Чакана індэтэфікатар або '('"
                 ))
 
         res.register_advancement()
@@ -1215,7 +1215,7 @@ class Parser:
                 if self.current_tok.type != TT_IDENTIFIER:
                     return res.failure(InvalidSyntaxError(
                         self.current_tok.pos_start, self.current_tok.pos_end,
-                        f"Чакана индэтэфикатар"
+                        f"Чакана індэтэфікатар"
                     ))
 
                 arg_name_toks.append(self.current_tok)
@@ -1231,7 +1231,7 @@ class Parser:
             if self.current_tok.type != TT_RPAREN:
                 return res.failure(InvalidSyntaxError(
                     self.current_tok.pos_start, self.current_tok.pos_end,
-                    f"Чакана индэтэфикатар або ')'"
+                    f"Чакана індэтэфікатар або ')'"
                 ))
 
         res.register_advancement()
@@ -1426,7 +1426,7 @@ class Value:
             other = self
         return RTError(
             self.pos_start, other.pos_end,
-            'Няправильная аперацыя',
+            'Няправільная аперацыя',
             self.context
         )
 
@@ -1459,7 +1459,7 @@ class Number(Value):
             if other.value == 0:
                 return None, RTError(
                     other.pos_start, other.pos_end,
-                    'Division by zero',
+                    'Дзяленне на нуль',
                     self.context
                 )
 
@@ -1598,7 +1598,7 @@ class List(Value):
             except:
                 return None, RTError(
                     other.pos_start, other.pos_end,
-                    'Выход за пределы массива', self.context
+                    'Выхад за межы масіва', self.context
                 )
         else:
             return None, Value.illegal_operation(self, other)
@@ -1632,14 +1632,14 @@ class BaseFunction(Value):
         if len(args) > len(arg_names):
             return res.failure(RTError(
                 self.pos_start, self.pos_end,
-                f"{len(args) - len(arg_names)} too many args passed into {self}",
+                f"{len(args) - len(arg_names)} перададзена занадта шмат аргументаў {self}",
                 self.context
             ))
 
         if len(args) < len(arg_names):
             return res.failure(RTError(
                 self.pos_start, self.pos_end,
-                f"{len(arg_names) - len(args)} too few args passed into {self}",
+                f"{len(arg_names) - len(args)} перададзена занадта мала аргументаў {self}",
                 self.context
             ))
 
@@ -1751,7 +1751,7 @@ class BuiltInFunction(BaseFunction):
                 number = int(text)
                 break
             except ValueError:
-                print(f"'{text}' must be an integer. Try again!")
+                print(f"'{text}' павінна быць цэлым лікам. Паспрабуй яшчэ!")
         return RTResult().success(Number(number))
 
     execute_input_int.arg_names = []
@@ -1787,7 +1787,7 @@ class BuiltInFunction(BaseFunction):
         if not isinstance(list_, List):
             return RTResult().failure(RTError(
                 self.pos_start, self.pos_end,
-                "First argument must be list",
+                "Першы аргумент павінен быць спісам",
                 exec_ctx
             ))
 
@@ -1803,14 +1803,14 @@ class BuiltInFunction(BaseFunction):
         if not isinstance(list_, List):
             return RTResult().failure(RTError(
                 self.pos_start, self.pos_end,
-                "First argument must be list",
+                "Першы аргумент павінен быць спісам",
                 exec_ctx
             ))
 
         if not isinstance(index, Number):
             return RTResult().failure(RTError(
                 self.pos_start, self.pos_end,
-                "Second argument must be number",
+                "Другі аргумент павінен быць лікам",
                 exec_ctx
             ))
 
@@ -1819,7 +1819,7 @@ class BuiltInFunction(BaseFunction):
         except:
             return RTResult().failure(RTError(
                 self.pos_start, self.pos_end,
-                'Element at this index could not be removed from list because index is out of bounds',
+                'Элемент з гэтым індэксам не можа быць выдалены са спісу, таму што індэкс знаходзіцца па-за межамі',
                 exec_ctx
             ))
         return RTResult().success(element)
@@ -1833,14 +1833,14 @@ class BuiltInFunction(BaseFunction):
         if not isinstance(listA, List):
             return RTResult().failure(RTError(
                 self.pos_start, self.pos_end,
-                "First argument must be list",
+                "Першы аргумент павінен быць спісам",
                 exec_ctx
             ))
 
         if not isinstance(listB, List):
             return RTResult().failure(RTError(
                 self.pos_start, self.pos_end,
-                "Second argument must be list",
+                "Другі аргумент павінен быць лікам",
                 exec_ctx
             ))
 
@@ -1977,9 +1977,9 @@ class Interpreter:
             result, error = left.get_comparison_lte(right)
         elif node.op_tok.type == TT_GTE:
             result, error = left.get_comparison_gte(right)
-        elif node.op_tok.matches(TT_KEYWORD, 'AND'):
+        elif node.op_tok.matches(TT_KEYWORD, 'і'):
             result, error = left.anded_by(right)
-        elif node.op_tok.matches(TT_KEYWORD, 'OR'):
+        elif node.op_tok.matches(TT_KEYWORD, 'або'):
             result, error = left.ored_by(right)
 
         if error:

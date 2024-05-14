@@ -3,7 +3,7 @@ from tkinter import *
 from ctypes import windll
 from PIL import Image, ImageTk
 
-tk_title = "BelVim"
+tk_title = "BelLang"
 
 root = Tk()
 root.title(tk_title)
@@ -41,6 +41,7 @@ def minimize_me():
     root.attributes("-alpha", 0)  # so you can't see the window when is minimized
     root.minimized = True
     root.bind("<FocusOut>", deminimize)
+
 
 def deminimize(event):
     root.focus()
@@ -150,7 +151,6 @@ def get_pos(event):
 title_bar.bind('<Button-1>', get_pos)
 title_bar_title.bind('<Button-1>', get_pos)
 
-
 close_button.bind('<Enter>', changex_on_hovering)
 close_button.bind('<Leave>', returnx_to_normalstate)
 expand_button.bind('<Enter>', change_size_on_hovering)
@@ -213,15 +213,13 @@ resizey_widget.bind("<B1-Motion>", resizey)
 root.after(10, lambda: set_appwindow(root))  # to see the icon on the task bar
 
 # Поле ввода текста
-editor = Text(font="Arial 14",  bg="#212120", fg="White", bd=0, state=NORMAL)
+editor = Text(font="Arial 14", bg="#212120", fg="White", bd=0, state=NORMAL)
 editor.focus_set()
 editor.place(y=35, relwidth=1, relheight=0.62222)
-
 
 # # Поле вывода текста
 output = Text(font="Arial 14", bg="#333331", fg="White", bd=0, state=DISABLED)
 output.place(rely=0.67, relwidth=1, relheight=0.33333)
-
 
 
 # # Ввод текста
@@ -233,7 +231,7 @@ def get_text1(event):
     if error:
         output.insert(END, error.as_string() + '\n')
     elif result:
-        output.insert(END,  result)
+        output.insert(END, result)
         output.insert(END, '\n')
     output.config(state=DISABLED)
 
@@ -246,7 +244,7 @@ def get_text2():
     if error:
         output.insert(END, error.as_string() + '\n')
     elif result:
-        output.insert(END,  result)
+        output.insert(END, result)
         output.insert(END, '\n')
     output.config(state=DISABLED)
 
@@ -262,25 +260,28 @@ def delete(event):
 editor.bind('<F10>', delete)
 editor.bind('<F10>', get_text1)
 
+# start button
 image = ImageTk.PhotoImage(file="start_button.png")
-start_button = Button(image=image, bg=RGRAY, bd=0, activebackground='#1D213C', cursor='hand2', height=33, width=33,
+start_button = Button(image=image, bg=RGRAY, bd=0, activebackground=LGRAY, cursor='hand2', height=33, width=33,
                       command=get_text2)
 start_button.place(relx=0.8)
+
+
+def help_print():
+    output.config(state=NORMAL)
+    delete1()
+    file = open('grammar.txt', encoding="utf-8")
+    help_text = file.read()
+    output.insert(END, help_text)
+    output.config(state=DISABLED)
+
+
+# help button
+help_button = Button(text="Дапамога", font="Arial 12", fg="WHITE", activeforeground="WHITE", bg=RGRAY, bd=0,
+                     activebackground=LGRAY, cursor='hand2', pady=4, command=help_print)
+help_button.place(relx=0.1)
 
 # ===================================================================================================
 
 root.mainloop()
 
-while True:
-    text = input('basic > ')
-    if text.strip() == "":
-        continue
-    result, error = basicbellang.run('<stdin>', text)
-
-    if error:
-        print(error.as_string())
-    elif result:
-        if len(result.elements) == 1:
-            print(repr(result.elements[0]))
-        else:
-            print(repr(result))
