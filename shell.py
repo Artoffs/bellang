@@ -1,7 +1,8 @@
-import basicbellang
+import basic
 from tkinter import *
 from ctypes import windll
 from PIL import Image, ImageTk
+from tkinter import filedialog
 
 tk_title = "BelLang"
 
@@ -66,6 +67,29 @@ def maximize_me():
         root.maximized = not root.maximized
         # now it is not maximized
 
+
+def open_file():
+    file_path = filedialog.askopenfilename(filetypes=[('Text Files', '*.bl')])
+    if file_path:
+        with open(file_path, 'r') as file:
+            text = file.read()
+            editor.insert('1.0', text)
+
+
+def save_file():
+    file_path = filedialog.asksaveasfilename(defaultextension=".bl")
+    if file_path:
+        text = editor.get('1.0', END)
+        with open(file_path, 'w') as file:
+            file.write(text)
+
+def help_print():
+    output.config(state=NORMAL)
+    clear_output()
+    file = open('grammar.txt', encoding="utf-8")
+    help_text = file.read()
+    output.insert(END, help_text)
+    output.config(state=DISABLED)
 
 close_button = Button(title_bar, text='  ×  ', command=root.destroy, bg=RGRAY, padx=2, pady=2, font=("calibri", 13),
                       bd=0, fg='white', highlightthickness=0)
@@ -222,25 +246,39 @@ output = Text(font="Arial 14", bg="#333331", fg="White", bd=0, state=DISABLED)
 output.place(rely=0.67, relwidth=1, relheight=0.33333)
 
 
+# help button
+help_button = Button(text="Дапамога", font="Arial 12", fg="WHITE", activeforeground="WHITE", bg=RGRAY, bd=0,
+                     activebackground=LGRAY, cursor='hand2', pady=4, command=help_print)
+help_button.place(relx=0.1)
+
+button_op = Button(text="Адкрыць файл", font="Arial 12", fg="WHITE", activeforeground="WHITE", bg=RGRAY, bd=0,
+                     activebackground=LGRAY, cursor='hand2', pady=4, command=open_file)
+button_op.place(relx=0.17)
+
+save_button = Button(text="Захаваць файл", font="Arial 12", fg="WHITE", activeforeground="WHITE", bg=RGRAY, bd=0,
+                     activebackground=LGRAY, cursor='hand2', pady=4, command=save_file)
+save_button.place(relx=0.27)
+
 # # Ввод текста
 def get_text1(event):
     output.config(state=NORMAL)
-    delete1()
+    clear_output()
     text = editor.get("1.0", END)
-    result, error = basicbellang.run("<праграмма>", text)
+    result, error = basic.run("<праграмма>", text)
     if error:
         output.insert(END, error.as_string() + '\n')
     elif result:
-        output.insert(END, result)
+        strok = "\n".join(str(x) for x in result.elements if x is not None)
+        output.insert(END, strok)
         output.insert(END, '\n')
     output.config(state=DISABLED)
 
 
 def get_text2():
     output.config(state=NORMAL)
-    delete1()
+    clear_output()
     text = editor.get("1.0", END)
-    result, error = basicbellang.run("<праграмма>", text)
+    result, error = basic.run("<праграмма>", text)
     if error:
         output.insert(END, error.as_string() + '\n')
     elif result:
@@ -249,15 +287,15 @@ def get_text2():
     output.config(state=DISABLED)
 
 
-def delete1():
+def clear_output():
     output.delete("1.0", END)
 
 
-def delete(event):
+def clear_output_event(event):
     output.delete("1.0", END)
 
 
-editor.bind('<F10>', delete)
+editor.bind('<F10>', clear_output_event)
 editor.bind('<F10>', get_text1)
 
 # start button
@@ -266,22 +304,6 @@ start_button = Button(image=image, bg=RGRAY, bd=0, activebackground=LGRAY, curso
                       command=get_text2)
 start_button.place(relx=0.8)
 
-
-def help_print():
-    output.config(state=NORMAL)
-    delete1()
-    file = open('grammar.txt', encoding="utf-8")
-    help_text = file.read()
-    output.insert(END, help_text)
-    output.config(state=DISABLED)
-
-
-# help button
-help_button = Button(text="Дапамога", font="Arial 12", fg="WHITE", activeforeground="WHITE", bg=RGRAY, bd=0,
-                     activebackground=LGRAY, cursor='hand2', pady=4, command=help_print)
-help_button.place(relx=0.1)
-
 # ===================================================================================================
 
 root.mainloop()
-

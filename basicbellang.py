@@ -1603,6 +1603,27 @@ class List(Value):
         else:
             return None, Value.illegal_operation(self, other)
 
+    def multed_by(self, other):
+        if isinstance(other, List):
+            new_list = self.copy()
+            new_list.elements.extend(other.elements)
+            return new_list, None
+        else:
+            return None, Value.illegal_operation(self, other)
+
+    def dived_by(self, other):
+        if isinstance(other, Number):
+            try:
+                return self.elements[other.value], None
+            except:
+                return None, RTError(
+                    other.pos_start, other.pos_end,
+                    'Выхад за межы масіва',
+                    self.context
+                )
+        else:
+            return None, Value.illegal_operation(self, other)
+
     def copy(self):
         copy = List(self.elements)
         copy.set_pos(self.pos_start, self.pos_end)
@@ -1691,6 +1712,7 @@ class Function(BaseFunction):
 
     def __repr__(self):
         return f"<function {self.name}>"
+
 
 
 class BuiltInFunction(BaseFunction):
@@ -1849,6 +1871,42 @@ class BuiltInFunction(BaseFunction):
 
     execute_extend.arg_names = ["listA", "listB"]
 
+    def execute_run(self, exec_ctx):
+        fn = exec_ctx.symbol_table.get("fn")
+
+        if not isinstance(fn, String):
+            return RTResult().failure(RTError(
+                self.pos_start, self.pos_end,
+                "Другі аргумент павінен быць стракой",
+                exec_ctx
+            ))
+
+        fn = fn.value
+
+        try:
+            with open(fn, "r") as f:
+                script = f.read()
+        except Exception as e:
+            return RTResult().failure(RTError(
+                self.pos_start, self.pos_end,
+                f"Failed to load script \"{fn}\"\n" + str(e),
+                exec_ctx
+            ))
+
+        _, error = run(fn, script)
+
+        if error:
+            return RTResult().failure(RTError(
+                self.pos_start, self.pos_end,
+                f"Failed to finish executing script \"{fn}\"\n" +
+                error.as_string(),
+                exec_ctx
+            ))
+
+        return RTResult().success(Number.null)
+
+    execute_run.arg_names = ["fn"]
+
 
 BuiltInFunction.print = BuiltInFunction("print_ret")
 BuiltInFunction.print_ret = BuiltInFunction("print")
@@ -1943,7 +2001,8 @@ class Interpreter:
         res = RTResult()
         var_name = node.var_name_tok.value
         value = res.register(self.visit(node.value_node, context))
-        if res.should_return(): return res
+        if res.should_return():
+            return res
 
         context.symbol_table.set(var_name, value)
         return res.success(value)
@@ -2029,14 +2088,17 @@ class Interpreter:
         elements = []
 
         start_value = res.register(self.visit(node.start_value_node, context))
-        if res.should_return(): return res
+        if res.should_return():
+            return res
 
         end_value = res.register(self.visit(node.end_value_node, context))
-        if res.should_return(): return res
+        if res.should_return():
+            return res
 
         if node.step_value_node:
             step_value = res.register(self.visit(node.step_value_node, context))
-            if res.should_return(): return res
+            if res.should_return():
+                return res
         else:
             step_value = Number(1)
 
@@ -2113,7 +2175,8 @@ class Interpreter:
         args = []
 
         value_to_call = res.register(self.visit(node.node_to_call, context))
-        if res.should_return(): return res
+        if res.should_return():
+            return res
         value_to_call = value_to_call.copy().set_pos(node.pos_start, node.pos_end)
 
         for arg_node in node.arg_nodes:
@@ -2121,7 +2184,8 @@ class Interpreter:
             if res.should_return(): return res
 
         return_value = res.register(value_to_call.execute(args))
-        if res.should_return(): return res
+        if res.should_return():
+            return res
         return_value = return_value.copy().set_pos(node.pos_start, node.pos_end).set_context(context)
         return res.success(return_value)
 
@@ -2130,7 +2194,8 @@ class Interpreter:
 
         if node.node_to_return:
             value = res.register(self.visit(node.node_to_return, context))
-            if res.should_return(): return res
+            if res.should_return():
+                return res
         else:
             value = Number.null
 
